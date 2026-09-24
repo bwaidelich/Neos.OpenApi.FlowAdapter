@@ -1,0 +1,41 @@
+Neos:
+  OpenApi:
+    FlowAdapter:
+      # The APIs to serve, by name:
+      #
+      # <name>:
+      #   # the URI path the API is served under, relative to the base URI
+      #   uriPrefix: 'api/blog'
+      #   info:
+      #     title: 'Blog'
+      #     version: '1.0.0'
+      #   # the Api Classes, i.e. classes with #[Operation] methods
+      #   classes:
+      #     'Some\Package\BlogApi': true
+      #   # optional: serves the OpenAPI specification under <uriPrefix>/<specPath>
+      #   specPath: 'openapi.json'
+      #   # optional: serves a Swagger UI for the OpenAPI specification under <uriPrefix>/<docsPath> (requires specPath)
+      #   docsPath: 'docs'
+      #   # optional: defaults to a single server at "/<uriPrefix>"
+      #   servers:
+      #     production:
+      #       url: 'https://example.com/api/blog'
+      #       description: 'Production'
+      #   # optional: authenticates the operations requiring it (#[Operation(security: …)]) and declares the security
+      #   # schemes they name – an object implementing Neos\OpenApi\FlowAdapter\AuthContextProviderWithSchemes
+      #   authContextProvider: 'Some\Package\BlogAuthContextProvider'
+      apis: []
+
+  Flow:
+    mvc:
+      routes:
+        'Neos.OpenApi.FlowAdapter':
+          # ahead of catch-all routes such as the Neos frontend's
+          position: start
+          providerFactory: Neos\OpenApi\FlowAdapter\Routing\OpenApiRoutesProviderFactory
+    http:
+      middlewares:
+        # answers requests no route matched, but whose path is one of an API's, with a 405
+        'Neos.OpenApi.FlowAdapter:methodNotAllowed':
+          position: 'after routing'
+          middleware: 'Neos\OpenApi\FlowAdapter\Http\MethodNotAllowedMiddleware'

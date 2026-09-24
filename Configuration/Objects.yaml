@@ -1,0 +1,5 @@
+Neos\OpenApi\FlowAdapter\CompiledApis:
+  scope: singleton
+  arguments:
+    1:
+      setting: 'Neos.OpenApi.FlowAdapter.apis'

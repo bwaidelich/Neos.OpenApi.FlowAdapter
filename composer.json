@@ -1,0 +1,71 @@
+{
+    "name": "neos/openapi-flowadapter",
+    "description": "Serve neos/openapi APIs through Flow: routes per operation, the OpenAPI specification and a Swagger UI, all configured in Settings.",
+    "type": "neos-package",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.4",
+        "neos/flow": "^9.0",
+        "neos/openapi": "dev-main"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12"
+    },
+    "autoload": {
+        "psr-4": {
+            "Neos\\OpenApi\\FlowAdapter\\": "Classes/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Neos\\OpenApi\\FlowAdapter\\Tests\\": "Tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../openapi",
+            "options": {
+                "versions": {
+                    "neos/openapi": "dev-main"
+                }
+            }
+        },
+        {
+            "type": "path",
+            "url": "../schematic",
+            "options": {
+                "versions": {
+                    "neos/schematic": "dev-main"
+                }
+            }
+        },
+        {
+            "type": "path",
+            "url": "../jsonschema",
+            "options": {
+                "versions": {
+                    "neos/jsonschema": "dev-main"
+                }
+            }
+        }
+    ],
+    "scripts": {
+        "test:phpunit": "phpunit",
+        "test": [
+            "@test:phpunit"
+        ]
+    },
+    "config": {
+        "allow-plugins": {
+            "neos/composer-plugin": false
+        }
+    },
+    "extra": {
+        "neos": {
+            "package-key": "Neos.OpenApi.FlowAdapter"
+        }
+    }
+}
