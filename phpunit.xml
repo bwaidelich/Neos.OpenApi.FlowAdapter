@@ -4,6 +4,9 @@
     <testsuite name="unit">
       <directory>Tests/Unit</directory>
     </testsuite>
+    <testsuite name="documentation">
+      <directory>Tests/Documentation</directory>
+    </testsuite>
   </testsuites>
   <source restrictNotices="true" restrictWarnings="true" ignoreIndirectDeprecations="true">
     <include>
