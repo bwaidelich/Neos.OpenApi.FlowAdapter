@@ -137,4 +137,27 @@ final class CompiledApisTest extends TestCase
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('"pong"', (string)$response->getBody());
     }
+
+    public function testSwaggerUiInitOAuthIsEmptyUnlessConfigured(): void
+    {
+        self::assertSame([], self::compiledApis(self::apiSettings(PingApi::class))->swaggerUiInitOAuth('test'));
+    }
+
+    public function testSwaggerUiInitOAuthIsPassedOnAsConfigured(): void
+    {
+        $settings = self::apiSettings(PingApi::class);
+        $settings['test']['swaggerUi']['initOAuth'] = ['clientId' => 'swagger-ui', 'scopes' => ['read']];
+
+        self::assertSame(['clientId' => 'swagger-ui', 'scopes' => ['read']], self::compiledApis($settings)->swaggerUiInitOAuth('test'));
+    }
+
+    public function testSwaggerUiInitOAuthThatIsNoMapIsRejected(): void
+    {
+        $settings = self::apiSettings(PingApi::class);
+        $settings['test']['swaggerUi']['initOAuth'] = ['swagger-ui'];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionCode(1790000006);
+        self::compiledApis($settings)->swaggerUiInitOAuth('test');
+    }
 }

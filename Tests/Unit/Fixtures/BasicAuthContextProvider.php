@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Neos\OpenApi\FlowAdapter\Tests\Unit\Fixtures;
 
 use Neos\OpenApi\FlowAdapter\AuthContextProviderWithSchemes;
+use Neos\OpenApi\Http\AuthenticationResult;
+use Neos\OpenApi\Http\Unauthenticated;
 use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Spec\SecuritySchemeObject;
 use Neos\OpenApi\Spec\SecuritySchemeOrReferenceObjectMap;
@@ -20,8 +22,8 @@ final class BasicAuthContextProvider implements AuthContextProviderWithSchemes
         return SecuritySchemeOrReferenceObjectMap::create()->with('basicAuth', SecuritySchemeObject::basic());
     }
 
-    public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): object|null
+    public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): AuthenticationResult
     {
-        return null;
+        return Unauthenticated::create();
     }
 }

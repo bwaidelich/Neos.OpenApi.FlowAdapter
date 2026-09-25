@@ -13,10 +13,18 @@ use Neos\OpenApi\FlowAdapter\CompiledApis;
 
 /**
  * Serves the requests {@see \Neos\OpenApi\FlowAdapter\Routing\OpenApiRoutesProvider} routed here: the operation `__operation`
- * of the API named `__api` – or, with `__spec`, that API's OpenAPI specification, and with `__docs`, a Swagger UI for it
+ * of the API named `__api` – or, with `__spec`, that API's OpenAPI specification, with `__docs`, a Swagger UI for it, and
+ * with `__oauth2Redirect`, the page that UI's OAuth2 authorization returns to
  */
 final readonly class OpenApiController implements ControllerInterface
 {
+    /**
+     * Where the page that the Swagger UI's OAuth2 authorization returns to is served, relative to the Swagger UI
+     */
+    public const string OAUTH2_REDIRECT_PATH = 'oauth2-redirect.html';
+
+    private const string SWAGGER_UI_ASSETS = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.0';
+
     public function __construct(
         private CompiledApis $compiledApis,
     ) {}
@@ -39,7 +47,19 @@ final readonly class OpenApiController implements ControllerInterface
         if ($request->getInternalArgument('__docs') !== null) {
             return new Response(
                 headers: ['Content-Type' => 'text/html; charset=UTF-8'],
-                body: self::swaggerUi($compiledApi->document->info->title, $this->specUri($request, $apiName)),
+                body: self::swaggerUi(
+                    $compiledApi->document->info->title,
+                    $this->specUri($request, $apiName),
+                    $this->oauth2RedirectUri($request, $apiName),
+                    $this->compiledApis->swaggerUiInitOAuth($apiName),
+                ),
+            );
+        }
+
+        if ($request->getInternalArgument('__oauth2Redirect') !== null) {
+            return new Response(
+                headers: ['Content-Type' => 'text/html; charset=UTF-8'],
+                body: self::oauth2Redirect(),
             );
         }
 
@@ -70,15 +90,41 @@ final readonly class OpenApiController implements ControllerInterface
         if ($specPath === null) {
             throw new \LogicException(sprintf('The API "%s" has no specPath', $apiName), 1790000034);
         }
-        $basePath = rtrim(RequestInformationHelper::generateBaseUri($request->getHttpRequest())->getPath(), '/');
-        return $basePath . '/' . ltrim($this->compiledApis->uriPrefix($apiName) . '/' . $specPath, '/');
+        return $this->uriPath($request, $apiName, $specPath);
     }
 
-    private static function swaggerUi(string $title, string $specUri): string
+    /**
+     * The absolute URI path of the page the Swagger UI's OAuth2 authorization returns to
+     */
+    private function oauth2RedirectUri(ActionRequest $request, string $apiName): string
     {
-        $assets = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.0';
+        $docsPath = $this->compiledApis->docsPath($apiName);
+        if ($docsPath === null) {
+            throw new \LogicException(sprintf('The API "%s" has no docsPath', $apiName), 1790000035);
+        }
+        return $this->uriPath($request, $apiName, $docsPath . '/' . self::OAUTH2_REDIRECT_PATH);
+    }
+
+    /**
+     * The absolute URI path of the given path of the API, taking into account the base URI Flow is served under
+     */
+    private function uriPath(ActionRequest $request, string $apiName, string $path): string
+    {
+        $basePath = rtrim(RequestInformationHelper::generateBaseUri($request->getHttpRequest())->getPath(), '/');
+        return $basePath . '/' . ltrim($this->compiledApis->uriPrefix($apiName) . '/' . $path, '/');
+    }
+
+    /**
+     * @param array<string, mixed> $initOAuth
+     */
+    private static function swaggerUi(string $title, string $specUri, string $oauth2RedirectUri, array $initOAuth): string
+    {
+        $assets = self::SWAGGER_UI_ASSETS;
         $escapedTitle = htmlspecialchars($title, ENT_QUOTES | ENT_HTML5);
-        $specUriJson = json_encode($specUri, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_THROW_ON_ERROR);
+        $specUriJson = self::json($specUri);
+        // made absolute in the browser, since the authorization server redirects the browser to it
+        $oauth2RedirectUriJson = self::json($oauth2RedirectUri);
+        $initOAuthCall = $initOAuth === [] ? '' : sprintf("\n        window.ui.initOAuth(%s);", self::json($initOAuth));
         return <<<HTML
             <!DOCTYPE html>
             <html lang="en">
@@ -92,10 +138,42 @@ final readonly class OpenApiController implements ControllerInterface
                 <div id="swagger-ui"></div>
                 <script src="{$assets}/swagger-ui-bundle.js" crossorigin></script>
                 <script>
-                    window.ui = SwaggerUIBundle({url: {$specUriJson}, dom_id: '#swagger-ui'});
+                    window.ui = SwaggerUIBundle({
+                        url: {$specUriJson},
+                        dom_id: '#swagger-ui',
+                        oauth2RedirectUrl: new URL({$oauth2RedirectUriJson}, window.location.href).href,
+                    });{$initOAuthCall}
                 </script>
             </body>
             </html>
             HTML;
+    }
+
+    /**
+     * The page the authorization server redirects to: it hands the result back to the Swagger UI that opened it
+     *
+     * It has to be served from the origin of the Swagger UI, since it talks to it through `window.opener`
+     */
+    private static function oauth2Redirect(): string
+    {
+        $assets = self::SWAGGER_UI_ASSETS;
+        return <<<HTML
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <title>Swagger UI: OAuth2 redirect</title>
+            </head>
+            <body>
+                <script src="{$assets}/oauth2-redirect.js" crossorigin></script>
+            </body>
+            </html>
+            HTML;
+    }
+
+    private static function json(mixed $value): string
+    {
+        // safe to embed in a <script> element
+        return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_THROW_ON_ERROR);
     }
 }

@@ -173,6 +173,7 @@ authentication. The name of an entry is used for its route names, and as the tit
 | `docsPath` | none | Serves a Swagger UI under `<uriPrefix>/<docsPath>`. Not served if unset, and requires a `specPath`. |
 | `servers` | a single server at `/<uriPrefix>` | The `servers` of the specification, see below. |
 | `authContextProvider` | none | The object name of the API's `AuthContextProviderWithSchemes`, see [Authentication](#authentication). |
+| `swaggerUi.initOAuth` | none | Options for the Swagger UI's OAuth2 authorization, see [OAuth2 in the Swagger UI](#oauth2-in-the-swagger-ui). |
 
 Neither `specPath` nor `docsPath` may be the path of one of the API's operations.
 
@@ -251,11 +252,15 @@ Neos:
 ```
 
 It implements `AuthContextProviderWithSchemes`: it declares the security schemes the operations name, and turns a
-request into the caller – any object of your own, or `null` for a `401`:
+request into an `AuthenticationResult` – `Authenticated::as($caller)` with any object of your own, `Unauthenticated`
+for a `401`, or `InsufficientScope` for a `403` (see [neos/openapi](https://github.com/neos/openapi)):
 
 ```php
 // ...
 use Neos\OpenApi\FlowAdapter\AuthContextProviderWithSchemes;
+use Neos\OpenApi\Http\Authenticated;
+use Neos\OpenApi\Http\AuthenticationResult;
+use Neos\OpenApi\Http\Unauthenticated;
 use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Spec\SecuritySchemeObject;
 use Neos\OpenApi\Spec\SecuritySchemeOrReferenceObjectMap;
@@ -272,10 +277,14 @@ final readonly class BlogAuthContextProvider implements AuthContextProviderWithS
         return SecuritySchemeOrReferenceObjectMap::create()->with('bearerAuth', SecuritySchemeObject::bearer());
     }
 
-    public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): object|null
+    public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): AuthenticationResult
     {
         $token = preg_replace('/^Bearer /', '', $request->getHeaderLine('Authorization'));
-        return $token !== '' ? $this->callers->findByToken($token) : null;
+        if ($token === '') {
+            return Unauthenticated::create();
+        }
+        $caller = $this->callers->findByToken($token);
+        return $caller !== null ? Authenticated::as($caller) : Unauthenticated::invalidToken();
     }
 }
 ```
@@ -299,8 +308,10 @@ assert((string)$response->getBody() === '"ada"');
 
 $response = $flow->request('GET', '/api/blog/me', ['Authorization' => 'Bearer wrong']);
 assert($response->getStatusCode() === 401);
+assert($response->getHeaderLine('WWW-Authenticate') === 'Bearer error="invalid_token"');
+$response = $flow->request('GET', '/api/blog/me');
+assert($response->getStatusCode() === 401);
 assert($response->getHeaderLine('WWW-Authenticate') === 'Bearer');
-assert($flow->request('GET', '/api/blog/me')->getStatusCode() === 401);
 
 // operations that don't require authentication don't ask the authContextProvider
 assert($flow->request('GET', '/api/blog/posts/hello')->getStatusCode() === 200);
@@ -370,16 +381,16 @@ final readonly class FlowAuthContextProvider implements AuthContextProviderWithS
         return SecuritySchemeOrReferenceObjectMap::create()->with('basicAuth', SecuritySchemeObject::basic());
     }
 
-    public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): object|null
+    public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): AuthenticationResult
     {
         // authenticates the credentials Flow collected from the request – without throwing if there are none
         $this->authenticationManager->isAuthenticated();
         foreach ($this->securityContext->getAuthenticationTokens() as $token) {
             if ($token->getAuthenticationProviderName() === 'Some.Package:BlogApi' && $token->isAuthenticated()) {
-                return new Caller((string)$token->getAccount()?->getAccountIdentifier());
+                return Authenticated::as(new Caller((string)$token->getAccount()?->getAccountIdentifier()));
             }
         }
-        return null;
+        return Unauthenticated::create();
     }
 }
 ```
@@ -408,10 +419,10 @@ $authContextProvider = function (TokenInterface ...$tokens): FlowAuthContextProv
 $request = new ServerRequest('GET', '/api/blog/me');
 $requirement = SecurityRequirementObject::scheme('basicAuth');
 
-assert($authContextProvider($token('Some.Package:BlogApi', true, 'ada'))->authContextFor($request, $requirement) == new Caller('ada'));
-assert($authContextProvider($token('Some.Package:BlogApi', false, 'ada'))->authContextFor($request, $requirement) === null);
+assert($authContextProvider($token('Some.Package:BlogApi', true, 'ada'))->authContextFor($request, $requirement) == Authenticated::as(new Caller('ada')));
+assert($authContextProvider($token('Some.Package:BlogApi', false, 'ada'))->authContextFor($request, $requirement) instanceof Unauthenticated);
 // e.g. a Neos backend session
-assert($authContextProvider($token('Neos.Neos:Backend', true, 'admin'))->authContextFor($request, $requirement) === null);
+assert($authContextProvider($token('Neos.Neos:Backend', true, 'admin'))->authContextFor($request, $requirement) instanceof Unauthenticated);
 assert($authContextProvider()->securitySchemes()->names() === ['basicAuth']);
 ```
 -->
@@ -427,6 +438,51 @@ Mind that:
 - **No CSRF protection applies:** Flow's CSRF check only kicks in for actions a policy protects, and the controller
   serving the API has none.
 
+### OAuth2 in the Swagger UI
+
+The Swagger UI can obtain a token for an `oauth2` security scheme on its own, from the authorization server the
+scheme's flows name. For the authorization code flow, it opens the authorization server's page in a popup, which
+redirects back to `<uriPrefix>/<docsPath>/oauth2-redirect.html` – a page served next to the Swagger UI, since it has
+to be of the same origin. Register that URI with the authorization server as a redirect URI of the Swagger UI's
+client.
+
+`swaggerUi.initOAuth` is passed to the Swagger UI's
+[`initOAuth()`](https://swagger.io/docs/open-source-tools/swagger-ui/usage/oauth2/) as it is, e.g. to set the
+client it authorizes as, and to use PKCE:
+
+```yaml
+Neos:
+  OpenApi:
+    FlowAdapter:
+      apis:
+        blog:
+          # ...
+          swaggerUi:
+            initOAuth:
+              clientId: 'swagger-ui'
+              usePkceWithAuthorizationCodeGrant: true
+```
+
+<!--
+```php
+// ...
+$flow = FakeFlow::withSettings($settings);
+
+$docs = (string)$flow->request('GET', '/api/blog/docs')->getBody();
+assert(str_contains($docs, 'oauth2RedirectUrl: new URL("/api/blog/docs/oauth2-redirect.html", window.location.href).href'));
+assert(str_contains($docs, 'window.ui.initOAuth({"clientId":"swagger-ui","usePkceWithAuthorizationCodeGrant":true});'));
+
+$response = $flow->request('GET', '/api/blog/docs/oauth2-redirect.html');
+assert($response->getStatusCode() === 200);
+assert(str_starts_with($response->getHeaderLine('Content-Type'), 'text/html'));
+assert(str_contains((string)$response->getBody(), '/oauth2-redirect.js'));
+
+$withoutInitOAuth = $settings;
+unset($withoutInitOAuth['Neos']['OpenApi']['FlowAdapter']['apis']['blog']['swaggerUi']);
+assert(!str_contains((string)FakeFlow::withSettings($withoutInitOAuth)->request('GET', '/api/blog/docs')->getBody(), 'initOAuth'));
+```
+-->
+
 ## How it works
 
 - **Routing:** every operation gets a Flow route of its own, pointing to one controller along with the operationId
@@ -437,6 +493,7 @@ Mind that:
   ```text
   blog :: OpenAPI specification
   blog :: Swagger UI
+  blog :: Swagger UI OAuth2 redirect
   blog :: getPost
   blog :: addComment
   blog :: me
@@ -446,7 +503,7 @@ Mind that:
 - **Servers:** unless `servers` are configured, the specification lists a single server at `/<uriPrefix>`, since its
   paths don't include the prefix.
 - **Swagger UI:** loads the specification from `<uriPrefix>/<specPath>`, taking into account the base URI Flow is
-  served under.
+  served under. Its OAuth2 redirect page is always served along with it, whether an API has an `oauth2` scheme or not.
 - **Compilation:** each API is compiled at most once per request.
 
 <!--
@@ -455,6 +512,7 @@ Mind that:
 assert(FakeFlow::withSettings($settings)->routeNames() === [
     'blog :: OpenAPI specification',
     'blog :: Swagger UI',
+    'blog :: Swagger UI OAuth2 redirect',
     'blog :: getPost',
     'blog :: addComment',
     'blog :: me',
@@ -473,8 +531,9 @@ A configuration the adapter can't serve fails loudly, with one of these exceptio
 | `1790000003` | The `authContextProvider` isn't a known object name. |
 | `1790000004` | The `authContextProvider` doesn't implement `AuthContextProviderWithSchemes`. |
 | `1790000005` | An operation requires authentication, but there is no `authContextProvider`, or it doesn't declare the scheme. |
+| `1790000006` | `swaggerUi.initOAuth` isn't a map of options. |
 | `1790000012` | A path template can't be expressed as a Flow route, see [Limitations](#limitations). |
-| `1790000013` | The `specPath` or `docsPath` is the path of one of the API's operations. |
+| `1790000013` | The `specPath`, the `docsPath` or its `oauth2-redirect.html` is the path of one of the API's operations. |
 
 Mistakes in the Api Classes themselves – a duplicate operationId, say – are reported by neos/openapi.
 

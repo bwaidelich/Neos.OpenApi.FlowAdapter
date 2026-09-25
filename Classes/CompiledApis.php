@@ -86,6 +86,22 @@ final class CompiledApis
         return $docsPath;
     }
 
+    /**
+     * The options the Swagger UI of the API passes to `initOAuth()`, e.g. the `clientId` it authorizes as – empty
+     * unless configured
+     *
+     * @return array<string, mixed>
+     */
+    public function swaggerUiInitOAuth(string $apiName): array
+    {
+        $initOAuth = $this->settings($apiName)['swaggerUi']['initOAuth'] ?? [];
+        if (!is_array($initOAuth) || ($initOAuth !== [] && array_is_list($initOAuth))) {
+            throw new \InvalidArgumentException(sprintf('The swaggerUi.initOAuth setting of the API "%s" has to be a map of Swagger UI options', $apiName), 1790000006);
+        }
+        /** @var array<string, mixed> $initOAuth */
+        return $initOAuth;
+    }
+
     public function requestHandler(string $apiName): RequestHandler
     {
         return new RequestHandler($this->get($apiName), $this->objectManager, $this->responseFactory, $this->streamFactory, $this->authContextProvider($apiName));
