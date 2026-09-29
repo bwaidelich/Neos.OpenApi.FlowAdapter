@@ -8,6 +8,7 @@ use Neos\Flow\Mvc\Routing\Route;
 use Neos\Flow\Mvc\Routing\Routes;
 use Neos\Flow\Mvc\Routing\RoutesProviderInterface;
 use Neos\OpenApi\FlowAdapter\CompiledApis;
+use Neos\OpenApi\FlowAdapter\Controller\OpenApiController;
 use Neos\OpenApi\Support\RelativePath;
 
 /**
@@ -15,7 +16,7 @@ use Neos\OpenApi\Support\RelativePath;
  *
  * One route per operation, all pointing to {@see \Neos\OpenApi\FlowAdapter\Controller\OpenApiController} with the
  * operationId to serve – plus, if the API has a `specPath`, one serving its OpenAPI specification, and if it has a
- * `docsPath`, one serving a Swagger UI for it
+ * `docsPath`, one serving a Swagger UI for it and one serving the page the Swagger UI's OAuth2 authorization returns to
  */
 final readonly class OpenApiRoutesProvider implements RoutesProviderInterface
 {
@@ -49,6 +50,7 @@ final readonly class OpenApiRoutesProvider implements RoutesProviderInterface
         $docsPath = $this->compiledApis->docsPath($apiName);
         if ($docsPath !== null) {
             $routes[] = $this->auxiliaryRoute($apiName, 'Swagger UI', $uriPrefix, $docsPath, '__docs');
+            $routes[] = $this->auxiliaryRoute($apiName, 'Swagger UI OAuth2 redirect', $uriPrefix, $docsPath . '/' . OpenApiController::OAUTH2_REDIRECT_PATH, '__oauth2Redirect');
         }
         // the document keeps concrete paths ahead of templates that would also match them, and so do the routes
         foreach ($compiledApi->document->paths ?? [] as $pathValue => $pathObject) {

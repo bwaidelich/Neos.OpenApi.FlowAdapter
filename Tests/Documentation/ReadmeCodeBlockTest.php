@@ -39,8 +39,9 @@ final class ReadmeCodeBlockTest extends TestCase
     /**
      * The options of an API in `Neos.OpenApi.FlowAdapter.apis`, as {@see \Neos\OpenApi\FlowAdapter\CompiledApis} reads them
      */
-    private const API_OPTIONS = ['uriPrefix', 'info', 'classes', 'specPath', 'docsPath', 'servers', 'authContextProvider'];
+    private const API_OPTIONS = ['uriPrefix', 'info', 'classes', 'specPath', 'docsPath', 'servers', 'authContextProvider', 'swaggerUi'];
     private const INFO_OPTIONS = ['title', 'version'];
+    private const SWAGGER_UI_OPTIONS = ['initOAuth'];
     private const SERVER_OPTIONS = ['url', 'description'];
 
     /**
@@ -184,6 +185,7 @@ final class ReadmeCodeBlockTest extends TestCase
             $where = sprintf('the API "%s" in the README block starting on line %d', $apiName, $line);
             self::assertSame([], array_diff(array_keys($api), self::API_OPTIONS), 'Unknown options of ' . $where);
             self::assertSame([], array_diff(array_keys($api['info'] ?? []), self::INFO_OPTIONS), 'Unknown info options of ' . $where);
+            self::assertSame([], array_diff(array_keys($api['swaggerUi'] ?? []), self::SWAGGER_UI_OPTIONS), 'Unknown swaggerUi options of ' . $where);
             foreach ($api['servers'] ?? [] as $server) {
                 self::assertSame([], array_diff(array_keys($server ?? []), self::SERVER_OPTIONS), 'Unknown server options of ' . $where);
             }

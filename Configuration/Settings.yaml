@@ -24,6 +24,11 @@ Neos:
       #   # optional: authenticates the operations requiring it (#[Operation(security: …)]) and declares the security
       #   # schemes they name – an object implementing Neos\OpenApi\FlowAdapter\AuthContextProviderWithSchemes
       #   authContextProvider: 'Some\Package\BlogAuthContextProvider'
+      #   # optional: passed to the Swagger UI's initOAuth(), e.g. to set the client it obtains OAuth2 tokens as
+      #   swaggerUi:
+      #     initOAuth:
+      #       clientId: 'swagger-ui'
+      #       usePkceWithAuthorizationCodeGrant: true
       apis: []
 
   Flow:

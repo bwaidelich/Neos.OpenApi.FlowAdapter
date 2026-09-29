@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Neos\OpenApi\FlowAdapter\Tests\Unit\Fixtures;
 
 use Neos\OpenApi\Http\AuthContextProvider;
+use Neos\OpenApi\Http\Authenticated;
+use Neos\OpenApi\Http\AuthenticationResult;
 use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -13,8 +15,8 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 final class PlainAuthContextProvider implements AuthContextProvider
 {
-    public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): object|null
+    public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): AuthenticationResult
     {
-        return new Caller('ada');
+        return Authenticated::as(new Caller('ada'));
     }
 }
